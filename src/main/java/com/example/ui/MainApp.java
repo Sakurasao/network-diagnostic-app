@@ -1,6 +1,8 @@
 package com.example.ui;
 
 import javafx.application.Application;
+import javafx.application.Platform;
+import javafx.scene.control.TextArea;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Tab;
@@ -18,24 +20,30 @@ public class MainApp extends Application {
         Tab pingTab = new Tab("Ping/Traceroute");
         VBox pingContent = new VBox();
         Button pingButton = new Button("Run Ping");
-        pingButton.setOnAction(event -> runPing());
-        pingContent.getChildren().add(pingButton);
+        Button clearPingLogButton = new Button("Clear Log");
+        TextArea pingLog = new TextArea();
+        pingLog.setEditable(false);
+        pingContent.getChildren().addAll(pingButton, clearPingLogButton, pingLog);
         pingTab.setContent(pingContent);
 
         // Port Scanner Tab
         Tab portTab = new Tab("Port Scanner");
         VBox portContent = new VBox();
         Button portButton = new Button("Run Port Scan");
-        portButton.setOnAction(event -> runPortScan());
-        portContent.getChildren().add(portButton);
+        Button clearPortLogButton = new Button("Clear Log");
+        TextArea portLog = new TextArea();
+        portLog.setEditable(false);
+        portContent.getChildren().addAll(portButton, clearPortLogButton, portLog);
         portTab.setContent(portContent);
 
         // JMeter Stress Test Tab
         Tab jmeterTab = new Tab("JMeter Stress Test");
         VBox jmeterContent = new VBox();
         Button jmeterButton = new Button("Run JMeter Test");
-        jmeterButton.setOnAction(event -> runJMeterTest());
-        jmeterContent.getChildren().add(jmeterButton);
+        Button clearJMeterLogButton = new Button("Clear Log");
+        TextArea jmeterLog = new TextArea();
+        jmeterLog.setEditable(false);
+        jmeterContent.getChildren().addAll(jmeterButton, clearJMeterLogButton, jmeterLog);
         jmeterTab.setContent(jmeterContent);
 
         tabPane.getTabs().addAll(pingTab, portTab, jmeterTab);
@@ -48,39 +56,42 @@ public class MainApp extends Application {
         primaryStage.show();
     }
 
-    private void runPing() {
+    private void runPing(TextArea log) {
         new Thread(() -> {
             try {
                 ProcessBuilder processBuilder = new ProcessBuilder("ping", "example.com");
                 Process process = processBuilder.start();
+                process.getInputStream().lines().forEach(line -> Platform.runLater(() -> log.appendText(line + "\n")));
                 int exitCode = process.waitFor();
-                System.out.println("Ping process exited with code " + exitCode);
+                Platform.runLater(() -> log.appendText("Ping process exited with code " + exitCode + "\n"));
             } catch (Exception e) {
                 e.printStackTrace();
             }
         }).start();
     }
 
-    private void runPortScan() {
+    private void runPortScan(TextArea log) {
         new Thread(() -> {
             try {
                 ProcessBuilder processBuilder = new ProcessBuilder("java", "-cp", "target/classes", "com.example.engine.PortScanner");
                 Process process = processBuilder.start();
+                process.getInputStream().lines().forEach(line -> Platform.runLater(() -> log.appendText(line + "\n")));
                 int exitCode = process.waitFor();
-                System.out.println("Port Scan process exited with code " + exitCode);
+                Platform.runLater(() -> log.appendText("Port Scan process exited with code " + exitCode + "\n"));
             } catch (Exception e) {
                 e.printStackTrace();
             }
         }).start();
     }
 
-    private void runJMeterTest() {
+    private void runJMeterTest(TextArea log) {
         new Thread(() -> {
             try {
                 ProcessBuilder processBuilder = new ProcessBuilder("java", "-cp", "target/classes", "com.example.engine.JMeterRunner");
                 Process process = processBuilder.start();
+                process.getInputStream().lines().forEach(line -> Platform.runLater(() -> log.appendText(line + "\n")));
                 int exitCode = process.waitFor();
-                System.out.println("JMeter Test process exited with code " + exitCode);
+                Platform.runLater(() -> log.appendText("JMeter Test process exited with code " + exitCode + "\n"));
             } catch (Exception e) {
                 e.printStackTrace();
             }
