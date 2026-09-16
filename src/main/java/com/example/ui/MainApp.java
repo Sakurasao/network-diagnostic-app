@@ -20,13 +20,18 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.net.HttpURLConnection;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.URL;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class MainApp extends Application {
 
@@ -42,7 +47,9 @@ public class MainApp extends Application {
     private final TextArea stressLog = new TextArea();
     private final TextField stressNotes = new TextField();
 
-    // Input manual Metadata Laporan Audit
+    private final TextArea speedLog = new TextArea();
+    private final TextField speedNotes = new TextField();
+
     private final TextField auditorNameInput = new TextField();
     private final TextField auditLocationInput = new TextField();
 
@@ -50,7 +57,6 @@ public class MainApp extends Application {
     public void start(Stage primaryStage) {
         primaryStage.setTitle("Network Diagnostic & Stress Testing Tool");
 
-        // Set Icon Taskbar
         try {
             InputStream iconStream = getClass().getResourceAsStream("/icon.png");
             if (iconStream != null) {
@@ -62,7 +68,6 @@ public class MainApp extends Application {
             primaryStage.getIcons().add(createAppIconImage());
         }
 
-        // Top Header Banner
         HBox headerBar = new HBox(12);
         headerBar.setPadding(new Insets(10, 15, 10, 15));
         headerBar.setAlignment(Pos.CENTER_LEFT);
@@ -89,7 +94,7 @@ public class MainApp extends Application {
 
         TabPane tabPane = new TabPane();
 
-        // 1. PING TAB
+        // 1. TAB PING & TRACEROUTE
         Tab pingTab = new Tab("Ping & Traceroute");
         VBox pingContent = new VBox(10);
         pingContent.setPadding(new Insets(15));
@@ -132,7 +137,7 @@ public class MainApp extends Application {
         });
         btnClearPing.setOnAction(e -> pingLog.clear());
 
-        // 2. PORT SCANNER TAB
+        // 2. TAB PORT SCANNER
         Tab portTab = new Tab("Port Scanner");
         VBox portContent = new VBox(10);
         portContent.setPadding(new Insets(15));
@@ -168,7 +173,7 @@ public class MainApp extends Application {
         });
         btnClearPort.setOnAction(e -> portLog.clear());
 
-        // 3. STRESS TEST TAB
+        // 3. TAB STRESS TEST
         Tab stressTab = new Tab("Stress Test");
         VBox stressContent = new VBox(10);
         stressContent.setPadding(new Insets(15));
@@ -201,7 +206,30 @@ public class MainApp extends Application {
         });
         btnClearStress.setOnAction(e -> stressLog.clear());
 
-        // 4. EXPORT TAB (DILENGKAPI FORM PENGUJI & LOKASI)
+        // 4. TAB SPEEDTEST
+        Tab speedTab = new Tab("Speedtest");
+        VBox speedContent = new VBox(10);
+        speedContent.setPadding(new Insets(15));
+
+        Button btnRunSpeedtest = new Button("Start Speedtest");
+        btnRunSpeedtest.setStyle("-fx-font-weight: bold;");
+        Button btnClearSpeed = new Button("Clear Log");
+
+        HBox speedBtnBox = new HBox(10, btnRunSpeedtest, btnClearSpeed);
+        speedLog.setEditable(false);
+        VBox.setVgrow(speedLog, Priority.ALWAYS);
+        speedNotes.setPromptText("Catatan Hasil Pengujian Kecepatan Bandwidth...");
+
+        speedContent.getChildren().addAll(new Label("Pengujian Latensi (Ping ms) & Kecepatan Bandwidth (Mbps / MB/s):"), speedBtnBox, speedLog, new Label("Catatan Audit:"), speedNotes);
+        speedTab.setContent(speedContent);
+
+        btnRunSpeedtest.setOnAction(e -> {
+            speedLog.clear();
+            runNativeSpeedtest(speedLog);
+        });
+        btnClearSpeed.setOnAction(e -> speedLog.clear());
+
+        // 5. TAB EXPORT REPORT
         Tab exportTab = new Tab("Export Report");
         VBox exportContent = new VBox(15);
         exportContent.setPadding(new Insets(20));
@@ -222,7 +250,7 @@ public class MainApp extends Application {
         metaForm.add(new Label("Lokasi Audit:"), 0, 1);
         metaForm.add(auditLocationInput, 1, 1);
 
-        Label exportDesc = new Label("Laporan ini akan menggabungkan data waktu (otomatis), nama penguji, lokasi, serta seluruh log dan catatan dari ketiga modul pengujian.");
+        Label exportDesc = new Label("Laporan ini akan menggabungkan data waktu (otomatis), nama penguji, lokasi, serta seluruh log dan catatan dari modul Ping & Traceroute, Port Scanner, Stress Test, dan Speedtest.");
         exportDesc.setWrapText(true);
 
         Button btnExportAll = new Button("Generate & Save Final Report (.txt)");
@@ -232,7 +260,7 @@ public class MainApp extends Application {
         exportContent.getChildren().addAll(exportTitle, metaForm, new Separator(), exportDesc, btnExportAll);
         exportTab.setContent(exportContent);
 
-        // 5. ABOUT TAB
+        // 6. TAB ABOUT DEVELOPER
         Tab aboutTab = new Tab("About Developer");
         VBox aboutContent = new VBox(12);
         aboutContent.setPadding(new Insets(20));
@@ -246,10 +274,9 @@ public class MainApp extends Application {
         aboutContent.getChildren().addAll(devTitle, new Separator(), devName, devNim, devUniv);
         aboutTab.setContent(aboutContent);
 
-        tabPane.getTabs().addAll(pingTab, portTab, stressTab, exportTab, aboutTab);
+        tabPane.getTabs().addAll(pingTab, portTab, stressTab, speedTab, exportTab, aboutTab);
         tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
 
-        // Status Bar
         HBox statusBar = new HBox(10, statusLabel);
         statusBar.setPadding(new Insets(8, 15, 8, 15));
         statusBar.setAlignment(Pos.CENTER_LEFT);
@@ -261,7 +288,7 @@ public class MainApp extends Application {
         root.setCenter(tabPane);
         root.setBottom(statusBar);
 
-        Scene scene = new Scene(root, 840, 650);
+        Scene scene = new Scene(root, 850, 650);
         try {
             scene.getStylesheets().add(getClass().getResource("/styles/main-theme.css").toExternalForm());
         } catch (Exception ignored) {}
@@ -344,6 +371,187 @@ public class MainApp extends Application {
         });
     }
 
+    private void runNativeSpeedtest(TextArea log) {
+        executor.submit(() -> {
+            Platform.runLater(() -> {
+                statusLabel.setText("Status: RUNNING SPEEDTEST...");
+                log.appendText("=== NETWORK BANDWIDTH & LATENCY SPEEDTEST ===\n");
+                log.appendText("Inisialisasi pengujian berbasis waktu (10 detik per sesi)...\n\n");
+            });
+
+            long finalPingMs = 0;
+            double finalDownloadMbps = 0.0;
+            double finalUploadMbps = 0.0;
+
+            // 1. Latency (Ping) Test
+            try {
+                Platform.runLater(() -> log.appendText("[1/3] Menghitung Latensi (Ping ms)...\n"));
+                String pingHost = "1.1.1.1";
+                long totalPingTime = 0;
+                int successfulPings = 0;
+
+                for (int i = 0; i < 4; i++) {
+                    long startPing = System.currentTimeMillis();
+                    InetAddress address = InetAddress.getByName(pingHost);
+                    if (address.isReachable(2000)) {
+                        long pingTime = System.currentTimeMillis() - startPing;
+                        totalPingTime += pingTime;
+                        successfulPings++;
+                    }
+                    Thread.sleep(100);
+                }
+
+                if (successfulPings > 0) {
+                    finalPingMs = totalPingTime / successfulPings;
+                    final long avgPing = finalPingMs;
+                    Platform.runLater(() -> log.appendText(String.format("   -> Latency (Ping): %d ms (Target: %s)\n", avgPing, pingHost)));
+                } else {
+                    Platform.runLater(() -> log.appendText("   -> Latency (Ping): Request Timeout\n"));
+                }
+            } catch (Exception e) {
+                Platform.runLater(() -> log.appendText("   -> Ping Test Error: " + e.getMessage() + "\n"));
+            }
+
+            // 2. Multi-Threaded Download Speed Test (Fast Cloudflare Endpoint)
+            try {
+                Platform.runLater(() -> log.appendText("\n[2/3] Menjalankan Multi-Thread Download (Durasi: 10 Detik)...\n"));
+
+                int numThreads = 6;
+                long durationLimitMs = 10000;
+                AtomicLong totalBytesRead = new AtomicLong(0);
+
+                ExecutorService dlPool = Executors.newFixedThreadPool(numThreads);
+                long startTime = System.currentTimeMillis();
+
+                for (int i = 0; i < numThreads; i++) {
+                    dlPool.submit(() -> {
+                        while (System.currentTimeMillis() - startTime < durationLimitMs && !Thread.currentThread().isInterrupted()) {
+                            try {
+                                URL downloadUrl = new URL("https://speed.cloudflare.com/__down?bytes=25000000");
+                                HttpURLConnection conn = (HttpURLConnection) downloadUrl.openConnection();
+                                conn.setRequestMethod("GET");
+                                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                                conn.setConnectTimeout(4000);
+                                conn.setReadTimeout(4000);
+
+                                InputStream in = conn.getInputStream();
+                                byte[] buffer = new byte[32768];
+                                int bytesRead;
+
+                                while ((bytesRead = in.read(buffer)) != -1) {
+                                    totalBytesRead.addAndGet(bytesRead);
+                                    if (System.currentTimeMillis() - startTime >= durationLimitMs) {
+                                        break;
+                                    }
+                                }
+                                in.close();
+                                conn.disconnect();
+                            } catch (Exception ignored) {}
+                        }
+                    });
+                }
+
+                Thread.sleep(durationLimitMs);
+                dlPool.shutdownNow();
+
+                long actualDurationMs = System.currentTimeMillis() - startTime;
+                double seconds = actualDurationMs / 1000.0;
+                long totalDownloaded = totalBytesRead.get();
+
+                if (seconds > 0 && totalDownloaded > 0) {
+                    finalDownloadMbps = (totalDownloaded * 8.0) / (seconds * 1000000.0);
+                    double downloadMBps = finalDownloadMbps / 8.0;
+
+                    String dlResult = String.format("   -> Download Speed: %.2f Mbps (%.2f MB/s) [Data: %.2f MB dalam %.2f detik]\n",
+                            finalDownloadMbps, downloadMBps, (totalDownloaded / (1024.0 * 1024.0)), seconds);
+                    Platform.runLater(() -> log.appendText(dlResult));
+                } else {
+                    Platform.runLater(() -> log.appendText("   -> Download Speed: 0.00 Mbps (Gagal menerima stream data)\n"));
+                }
+
+            } catch (Exception e) {
+                Platform.runLater(() -> log.appendText("   -> Download Test Error: " + e.getMessage() + "\n"));
+            }
+
+            // 3. Multi-Threaded Upload Speed Test
+            try {
+                Platform.runLater(() -> log.appendText("\n[3/3] Menjalankan Multi-Thread Upload (Durasi: 10 Detik)...\n"));
+
+                int numThreads = 8;
+                long durationLimitMs = 10000;
+                int payloadSize = 50 * 1024 * 1024;
+                AtomicLong totalBytesUploaded = new AtomicLong(0);
+
+                ExecutorService ulPool = Executors.newFixedThreadPool(numThreads);
+                long startTime = System.currentTimeMillis();
+
+                for (int i = 0; i < numThreads; i++) {
+                    ulPool.submit(() -> {
+                        try {
+                            URL uploadUrl = new URL("https://speed.cloudflare.com/__up");
+                            HttpURLConnection conn = (HttpURLConnection) uploadUrl.openConnection();
+                            conn.setRequestMethod("POST");
+                            conn.setDoOutput(true);
+                            conn.setConnectTimeout(5000);
+                            conn.setReadTimeout(5000);
+                            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                            conn.setFixedLengthStreamingMode(payloadSize);
+
+                            OutputStream out = conn.getOutputStream();
+                            byte[] dummyChunk = new byte[65536];
+                            int uploaded = 0;
+
+                            while (uploaded < payloadSize) {
+                                if (System.currentTimeMillis() - startTime >= durationLimitMs) {
+                                    break;
+                                }
+                                int toWrite = Math.min(dummyChunk.length, payloadSize - uploaded);
+                                out.write(dummyChunk, 0, toWrite);
+                                uploaded += toWrite;
+                                totalBytesUploaded.addAndGet(toWrite);
+                            }
+                            out.flush();
+                            out.close();
+                            conn.disconnect();
+                        } catch (Exception ignored) {}
+                    });
+                }
+
+                Thread.sleep(durationLimitMs);
+                ulPool.shutdownNow();
+
+                long actualDurationMs = System.currentTimeMillis() - startTime;
+                double seconds = actualDurationMs / 1000.0;
+                long totalUploaded = totalBytesUploaded.get();
+
+                if (seconds > 0 && totalUploaded > 0) {
+                    finalUploadMbps = (totalUploaded * 8.0) / (seconds * 1000000.0);
+                    double uploadMBps = finalUploadMbps / 8.0;
+
+                    String ulResult = String.format("   -> Upload Speed: %.2f Mbps (%.2f MB/s) [Data: %.2f MB dalam %.2f detik]\n",
+                            finalUploadMbps, uploadMBps, (totalUploaded / (1024.0 * 1024.0)), seconds);
+                    Platform.runLater(() -> log.appendText(ulResult));
+                } else {
+                    Platform.runLater(() -> log.appendText("   -> Upload Speed: 0.00 Mbps (Gagal mengirim stream data)\n"));
+                }
+
+            } catch (Exception e) {
+                Platform.runLater(() -> log.appendText("   -> Upload Test Error: " + e.getMessage() + "\n"));
+            }
+
+            final long resPing = finalPingMs;
+            final double resDl = finalDownloadMbps;
+            final double resUl = finalUploadMbps;
+
+            Platform.runLater(() -> {
+                log.appendText("\n--------------------------------------------------\n");
+                log.appendText("[Speedtest Selesai]\n");
+                log.appendText(String.format("SUMMARY: Download = %.2f Mbps | Upload = %.2f Mbps | Ping = %d ms\n", resDl, resUl, resPing));
+                statusLabel.setText("Status: IDLE");
+            });
+        });
+    }
+
     private void exportUnifiedReport(Stage stage) {
         String auditorName = auditorNameInput.getText().trim();
         String auditLocation = auditLocationInput.getText().trim();
@@ -380,6 +588,12 @@ public class MainApp extends Application {
                 writer.println("Catatan Audit: " + (stressNotes.getText().isEmpty() ? "-" : stressNotes.getText()));
                 writer.println("Hasil Log:");
                 writer.println(stressLog.getText().isEmpty() ? "[Tidak ada data]" : stressLog.getText());
+                writer.println("\n-------------------------------------------------------------------------\n");
+
+                writer.println(">>> 4. MODUL SPEEDTEST <<<");
+                writer.println("Catatan Audit: " + (speedNotes.getText().isEmpty() ? "-" : speedNotes.getText()));
+                writer.println("Hasil Log:");
+                writer.println(speedLog.getText().isEmpty() ? "[Tidak ada data]" : speedLog.getText());
                 writer.println("\n=========================================================================");
 
                 Alert alert = new Alert(Alert.AlertType.INFORMATION, "Laporan Terpadu Berhasil Disimpan di:\n" + file.getAbsolutePath(), ButtonType.OK);
